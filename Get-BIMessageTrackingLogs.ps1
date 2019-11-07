@@ -7,7 +7,8 @@ Param(
      [ValidateScript({If ($_ -match "^([\w-\.]+)@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.)|(([\w-]+\.)+))([a-zA-Z]{2,4}|[0-9]{1,3})(\]?)$") { $True } Else { Throw "$_ is not a valid email address!" }})]$Sender = $Null,    
   [Parameter(Mandatory=$false,ParameterSetName='explicit',HelpMessage="Enter a single email address")][AllowNull()][AllowEmptyString()]
     [ValidateScript({If ($_ -match "^([\w-\.]+)@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.)|(([\w-]+\.)+))([a-zA-Z]{2,4}|[0-9]{1,3})(\]?)$") { $True } Else { Throw "$_ is not a valid email address!" }})]$Recipient = $Null,
-  [Parameter(Mandatory=$false,ParameterSetName='explicit',HelpMessage="Enter part of the Subject text")][AllowNull()][AllowEmptyString()]$MessageSubject = $Null
+  [Parameter(Mandatory=$false,ParameterSetName='explicit',HelpMessage="Enter part of the Subject text")][AllowNull()][AllowEmptyString()]$MessageSubject = $Null,
+  [Parameter(Mandatory=$false,ParameterSetName='explicit',HelpMessage="Enter the messageID")][AllowNull()][AllowEmptyString()]$MessageId = $Null  
 )
 
 <#
@@ -16,7 +17,11 @@ Param(
         Executing machine must have Exchange Tools installed.
 
     Notes: 
-        Dates must have the following format mm/dd/yyyy, the hours are automatically set.         
+        Dates must have the following format mm/dd/yyyy, the hours are automatically set. 
+    
+    Examples:
+        \Get-BIMessageTrackingLogs.ps1 -Recipient xavier.rodriguez_ruiz.ext@boehringer-ingelheim.com -> will search all emails to the recipient
+        \Get-BIMessageTrackingLogs.ps1 -Recipient xavier.rodriguez_ruiz.ext@boehringer-ingelheim.com  -StartSearchDate "11/05/2019" > will search all emails to the recipient and from 5th Nov 2019 at 00:00           
 
     Version:
         1.0 - XR  10/11/2019  Initial Release
@@ -42,10 +47,11 @@ $ScriptBlock = {
         $MTEndSearchDate = $NULL, 
         $MTTargetSender = $NULL,
         $MTMessageSubject = $NULL, 
-        $MTTargetRecipient = $NULL        
+        $MTTargetRecipient = $NULL,  
+        $MTMessageId = $NULL                
     ) 
         Add-PSSnapin *Exchange*         
-        get-messagetrackinglog -Server $MTTargetServer -Start $MTstartsearchdate -End $MTEndSearchDate -Sender $MTTargetSender -Recipients $MTTargetRecipient -MessageSubject $MTMessageSubject -resultsize unlimited  | select Timestamp,ClientIp,ClientHostname,ServerIp,ServerHostname,SourceContext,ConnectorId,Source,EventId,InternalMessageId,MessageIdNetworkMessageId,Recipients,RecipientStatus,TotalBytes,RecipientCount,RelatedRecipientAddress,Reference,MessageSubject,Sender,ReturnPath,Directionality,TenantId,OriginalClientIp,MessageInfo,MessageLatency,MessageLatencyType,EventData,TransportTrafficType,SchemaVersion        
+        get-messagetrackinglog -Server $MTTargetServer -Start $MTstartsearchdate -End $MTEndSearchDate -Sender $MTTargetSender -Recipients $MTTargetRecipient -MessageSubject $MTMessageSubject -MessageID $MTMessageId -resultsize unlimited  | select Timestamp,ClientIp,ClientHostname,ServerIp,ServerHostname,SourceContext,ConnectorId,Source,EventId,InternalMessageId,MessageId,MessageIdNetworkMessageId,Recipients,RecipientStatus,TotalBytes,RecipientCount,RelatedRecipientAddress,Reference,MessageSubject,Sender,ReturnPath,Directionality,TenantId,OriginalClientIp,MessageInfo,MessageLatency,MessageLatencyType,EventData,TransportTrafficType,SchemaVersion        
 } 
 
 function time_pipeline { 
@@ -80,6 +86,7 @@ $ProcessEmailStats = {
             $Obj | add-member -membertype NoteProperty -name "Source" -value "$($_.EventId)"
             $Obj | add-member -membertype NoteProperty -name "EventId" -value "$($_.ConnectorId)"
             $Obj | add-member -membertype NoteProperty -name "InternalMessageId" -value "$($_.InternalMessageId)"
+            $Obj | add-member -membertype NoteProperty -name "MessageId" -value "$($_.MessageId)"
             $Obj | add-member -membertype NoteProperty -name "MessageIdNetworkMessageId" -value "$($_.MessageIdNetworkMessageId)"
             $Obj | add-member -membertype NoteProperty -name "Recipients" -value "$($_.Recipients)"
             $Obj | add-member -membertype NoteProperty -name "RecipientStatus" -value "$($_.RecipientStatus)"
@@ -109,6 +116,7 @@ if($StartSearchDate){ $StartSearchDate = get-date $StartSearchDate; write-host "
 if($EndSearchDate){ $EndSearchDate = get-date $EndSearchDate; $EndSearchDate = (($EndSearchDate.AddHours(23)).AddMinutes(59)).AddSeconds(59); write-host "End Date: $EndSearchDate" }
 if($Recipient) { Write-Host "Recipient: $Recipient" }
 if($Sender) { Write-Host "Sender: $Sender" }
+if($MessageId) { Write-Host "MessageId: $MessageId" }
 if($MessageSubject) { Write-Host "Message Subject: $MessageSubject"}
 
 $Jobs = @() 
@@ -123,6 +131,7 @@ ForEach ($ht in $hts) {
         "MTTargetSender" = $Sender; 
         "MTTargetRecipient" = $Recipient;   
         "MTMessageSubject" = $MessageSubject;
+        "MTMessageId" = $MessageId;
     } 
  
     $Job = [powershell]::Create().AddScript($ScriptBlock)
